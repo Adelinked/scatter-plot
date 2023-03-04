@@ -1,0 +1,222 @@
+<html>
+  <head>
+    <script src="./d3.min.js"></script>
+
+    <style>
+      :root {
+        --color-noAllegation: #39f142;
+        --color-allegation: #f91706;
+      }
+      * {
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        background-color: gray;
+        font-weight: 600;
+      }
+      .svg {
+        background-color: white;
+        position: relative;
+      }
+      .svg:hover #title {
+        border: 1px black solid;
+      }
+      .title {
+        padding: 10px 0;
+        text-align: center;
+      }
+      .subTitle {
+        text-align: center;
+        font-size: 22px;
+      }
+
+      .content {
+        padding: 30px 20px;
+        background-color: white;
+        box-shadow: 1px 1px 10px black;
+      }
+      #tooltip {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: flex-start;
+        padding: 5px 10px;
+        border-radius: 5px;
+        background-color: rgb(143, 160, 197);
+        text-align: center;
+        transition: opacity 200ms;
+        position: absolute;
+        box-shadow: 1px 1px 10px black;
+        font-size: 14px;
+        font-weight: 400;
+      }
+      #legend {
+        display: flex;
+        flex-direction: column;
+        padding: 5px;
+        position: absolute;
+        top: 50%;
+        right: 20%;
+        font-size: 14px;
+        font-weight: 400;
+      }
+      #legend > div {
+        display: flex;
+        justify-content: flex-end;
+        align-items: center;
+        margin-bottom: 5px;
+      }
+      .legendNoAlleg {
+        background-color: var(--color-noAllegation);
+        width: 25px;
+        height: 25px;
+        margin-left: 2px;
+      }
+      .legendAlleg {
+        background-color: var(--color-allegation);
+        width: 25px;
+        height: 25px;
+        margin-left: 2px;
+      }
+
+      .dot {
+        stroke: black;
+        stroke-width: 1px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="content" id="container">
+      <h1 id="title" class="title">Doping in Professional Bicycle Racing</h1>
+      <p class="subTitle">35 Fastest times up Alpe d'Huez</p>
+
+      <script>
+        function onMouseOver() {
+          const element = event.target;
+          if (element.tagName == "circle") {
+            const data = JSON.parse(element.getAttribute("data"));
+            const { Name, Nationality, Year, Time, Doping } = data;
+
+            tooltip.setAttribute("data-year", Year);
+            tooltip.innerHTML = `<p>${Name + ": " + Nationality}</p><p>${
+              "Year: " + Year + ", Time: " + Time
+            }</p>${Doping ? `<p>${Doping}</p>` : ""}`;
+
+            if (Doping) {
+              element.style.fill = "var(--color-allegation)";
+            }
+
+            tooltip.style.left = event.clientX;
+            tooltip.style.top = event.clientY;
+
+            tooltip.style.opacity = "0.9";
+          } else {
+            tooltip.style.opacity = "0";
+          }
+        }
+
+        (async () => {
+          const responce = await fetch(
+            "https://raw.githubusercontent.com/freeCodeCamp/ProjectReferenceData/master/cyclist-data.json"
+          );
+          if (responce.ok) {
+            let dataset = await responce.json();
+
+            const timeToDate = (time) => {
+              const date = new Date();
+              date.setMinutes(+time.slice(0, 2), +time.slice(3, 5));
+              return date;
+            };
+            const yearToDate = (year) => {
+              const date = new Date();
+              date.setFullYear(year);
+              return date;
+            };
+            dataset = dataset.map((i) => ({
+              ...i,
+              time: timeToDate(i.Time),
+              year: yearToDate(i.Year),
+            }));
+
+            const w = 800;
+            const h = 500;
+            const padding = 50;
+
+            const xMin = d3.min(dataset, (d) => d.year);
+            const xMax = d3.max(dataset, (d) => d.year);
+
+            const xScale = d3
+              .scaleTime()
+              .domain([xMin, xMax])
+              .range([padding, w - padding]);
+
+            const yMin = d3.min(dataset, (d) => d.time);
+            const yMax = d3.max(dataset, (d) => d.time);
+            const yScale = d3
+              .scaleTime()
+              .domain([yMax, yMin])
+              .range([h - padding, padding]);
+
+            const svg = d3
+              .select("div")
+              .append("svg")
+              .attr("width", w)
+              .attr("height", h)
+              .attr("class", "svg")
+              .attr("id", "svg")
+              .attr("onmouseover", "onMouseOver()");
+
+            d3.select("div")
+              .append("div")
+              .attr("id", "tooltip")
+              .style("opacity", "0");
+
+            d3.select("div").append("div").attr("id", "legend");
+            legend.innerHTML = `<div>No doping allegations<div class="legendNoAlleg"></div></div> <div>Riders with doping allegations<div class="legendAlleg"></div></div>`;
+
+            const xAxis = d3.axisBottom(xScale);
+            const yAxis = d3
+              .axisLeft(yScale)
+              .tickFormat(d3.timeFormat("%M:%S"));
+
+            svg
+              .append("g")
+              .attr("id", "x-axis")
+              .attr("transform", "translate(0," + (h - padding) + ")")
+              .call(xAxis);
+
+            svg
+              .append("g")
+              .attr("id", "y-axis")
+              .attr("transform", "translate(" + padding + ",0)")
+              .call(yAxis);
+
+            svg
+              .selectAll("dot")
+              .data(dataset)
+              .enter()
+              .append("circle")
+              .attr("data", (d) => JSON.stringify(d))
+              .attr("cx", (d, i) => xScale(d.year))
+              .attr("cy", (d, i) => yScale(d.time))
+              .attr("r", 5)
+              .attr("data-xvalue", (d) => d.Year)
+              .attr("data-yvalue", (d) => d.time)
+              .attr("class", "dot")
+              .attr("fill", (d) =>
+                d.Doping
+                  ? "var(--color-allegation)"
+                  : "var(--color-noAllegation)"
+              );
+          }
+        })();
+      </script>
+      <script src="https://cdn.freecodecamp.org/testable-projects-fcc/v1/bundle.js"></script>
+    </div>
+  </body>
+</html>
